@@ -165,6 +165,10 @@ python scripts/cli.py send-direct-message \
 
 详细流程见 [xhs-interact](skills/xhs-interact/SKILL.md#发送文字私信)。
 
+## 日常管理
+
+新增私信历史与待回复、互动通知、后台笔记与本地草稿、关注状态、个人收藏检索、分享链接和 JSON/Markdown 导出。详见 [日常使用与运营管理](docs/daily-operations.md)。
+
 ## CLI 命令参考
 
 | 子命令 | 说明 |
@@ -192,6 +196,16 @@ python scripts/cli.py send-direct-message \
 | `long-article` | 长文模式：填写 + 一键排版 |
 | `select-template` | 选择长文排版模板 |
 | `next-step` | 长文下一步 + 填写描述 |
+| `list-inbox / get-messages` | 私信会话和历史读取 |
+| `list-pending-replies / mark-conversation` | 待回复检查和本地处理标记 |
+| `get-notifications` | 评论回复、提及、赞藏、新增关注通知 |
+| `get-follow-status / set-follow` | 关注状态查询及确认后变更 |
+| `list-my-notes / list-favorites / list-collections` | 个人笔记、收藏和网页专辑 |
+| `search-library` | 个人笔记和收藏的标题、作者检索 |
+| `list-managed-notes / get-note-status` | 创作后台笔记及状态 |
+| `list-drafts / open-draft` | 浏览器本地草稿及恢复编辑预览 |
+| `get-share-url / resolve-link` | 分享链接生成与解析 |
+| `export-note / export-content` | 读取笔记或已有数据后导出JSON/Markdown |
 
 退出码：`0` 成功 · `1` 未登录 · `2` 错误
 

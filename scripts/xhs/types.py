@@ -159,6 +159,13 @@ class Feed:
                 "sharedCount": self.note_card.interact_info.shared_count,
             },
         }
+        from .links import make_share_url
+
+        try:
+            result["shareUrl"] = make_share_url(self.id, self.xsec_token) if self.xsec_token else ""
+        except ValueError:
+            # 非笔记卡片可能没有合法笔记 ID，仍保留原有序列化结果。
+            result["shareUrl"] = ""
         cover = self.note_card.cover
         if cover.url or cover.url_default:
             result["cover"] = cover.url or cover.url_default

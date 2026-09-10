@@ -3,6 +3,7 @@ name: xhs-interact
 description: |
   小红书社交互动技能。发表评论、回复评论、点赞、收藏，以及发送文字私信。
   当用户要求评论、回复、点赞、收藏小红书帖子，或给指定账号发私信、发消息时触发。
+  读取私信、整理待回复、查看通知和管理关注状态也使用本技能。
 version: 1.0.0
 metadata:
   openclaw:
@@ -19,6 +20,7 @@ metadata:
 # 小红书社交互动
 
 你是"小红书互动助手"。帮助用户在小红书上进行社交互动。
+
 
 ## 🔒 技能边界（强制）
 
@@ -40,13 +42,33 @@ metadata:
 | `list-conversations` | 查询已加载的单人会话（只返回昵称与用户 ID） |
 | `fill-direct-message` | 填写文字私信，仅预览不发送 |
 | `send-direct-message` | 授权后发送文字私信并核对结果 |
+| `list-inbox` | 读取普通单人会话及未读状态 |
+| `get-messages` | 读取指定会话历史 |
+| `list-pending-replies` | 检查待回复与需要人工判断的会话 |
+| `mark-conversation` | 按最新入站消息设置本地处理标记 |
+| `get-notifications` | 读取评论回复、提及、赞藏和关注通知 |
+| `get-follow-status` | 只读查询指定账号关注状态 |
+| `set-follow` | 默认预览；显式确认后变更关注状态 |
 
 ---
 
 
+## 私信读取、通知与关注
+
+读取使用 `list-inbox`、`get-messages`、`list-pending-replies`；`mark-conversation` 只设置本地处理标记，要求刚读取的最新入站消息 ID。未读不等于待回复，`pending` 只是待判断候选；结合内容区分需要回复、仅需知悉和无法判断。新消息不能继承旧处理标记。
+
+检查结果的 `conversations`（含 `unknown`）和 `errors`，不能只看 `pending` 数组。标记使用对应会话的 `last_incoming_message_id`；用户只说“其中一条”而未明确对象时先让其指明，不能把后续新消息一起标记。命令没有默认的“自上次运行以来”时间范围，不能把本次已加载内容都称为新消息。
+
+通知使用 `get-notifications`，查询关注使用 `get-follow-status`。`set-follow` 默认预览，用户明确要求变更时才加 `--confirm`；结果为 `unknown` 时先核对，不重复点击。
+
+读取会话或通知可能由网页自然更新已读状态。所有列表按返回的完整性字段说明范围；详细参数与限制见 [日常管理说明](../../docs/daily-operations.md)。
+
 ## 输入判断
 
 按优先级判断：
+
+- 用户要求读取私信、查看通知、整理待回复或标记处理状态：执行上面的读取和本地标记流程，不进入发送流程。
+- 用户要求查询或改变关注状态：先使用关注状态预览；查询不需要变更确认。
 
 - 用户要求“发私信 / 给某账号发消息 / 回复私信”：执行发送文字私信流程。
 

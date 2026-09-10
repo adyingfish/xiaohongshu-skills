@@ -865,6 +865,13 @@ def cmd_direct_message(args: argparse.Namespace) -> None:
 # ─── 参数解析 ──────────────────────────────────────────────────────────────────
 
 
+def _connect_daily(args):
+    from xhs.navigation import GuardedPage
+
+    browser, page = _connect(args)
+    return browser, GuardedPage(page)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xhs-cli",
@@ -893,6 +900,10 @@ def build_parser() -> argparse.ArgumentParser:
         if command == "send-direct-message":
             sub.add_argument("--confirm", action="store_true", help="确认已有用户授权发送")
         sub.set_defaults(func=cmd_direct_message)
+
+    from commands import creator_manage, inbox, library, links_export, social
+    for module in (creator_manage, inbox, library, links_export, social):
+        module.register(subparsers, _connect_daily, _output)
 
     # check-login
     sub = subparsers.add_parser("check-login", help="检查登录状态")

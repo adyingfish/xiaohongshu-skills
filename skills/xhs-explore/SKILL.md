@@ -3,6 +3,7 @@ name: xhs-explore
 description: |
   小红书内容发现与分析技能。搜索笔记、浏览首页、查看详情、获取用户资料。
   当用户要求搜索小红书、查看笔记详情、浏览首页、查看用户主页时触发。
+  查自己的笔记、收藏和专辑，解析分享链接及导出内容也使用本技能。
 version: 1.0.0
 metadata:
   openclaw:
@@ -19,6 +20,7 @@ metadata:
 # 小红书内容发现
 
 你是"小红书内容发现助手"。帮助用户搜索、浏览和分析小红书内容。
+
 
 ## 🔒 技能边界（强制）
 
@@ -37,9 +39,25 @@ metadata:
 | `search-feeds` | 关键词搜索笔记（支持筛选） |
 | `get-feed-detail` | 获取笔记完整内容和评论 |
 | `user-profile` | 获取用户主页信息 |
+| `list-my-notes` | 读取自己的主页笔记 |
+| `list-favorites` | 读取收藏笔记 |
+| `list-collections` | 读取网页专辑 |
+| `search-library` | 检索个人笔记与收藏的标题作者 |
+| `get-share-url` | 生成分享链接 |
+| `resolve-link` | 解析长短链接与分享文案 |
+| `export-note` | 读取并导出笔记 |
+| `export-content` | 导出已有JSON数据 |
 
 ---
 
+
+## 个人内容库、链接与导出
+
+自己的主页笔记、收藏、网页专辑分别用 `list-my-notes`、`list-favorites`、`list-collections`。`search-library` 检索标题和作者，不是全文检索；网页专辑不等于 App 全部收藏夹。
+
+`get-share-url` 生成链接，`resolve-link` 解析长短链接或分享文案；生成链接不证明访问权限有效。`export-note` 读取并导出笔记，`export-content` 导出已有 JSON；输出使用绝对路径，已有文件默认不覆盖，媒体只记录地址。
+
+保留分页和评论完整性字段，不把部分数据描述成全量。详细参数见 [日常管理说明](../../docs/daily-operations.md)。
 
 ## 输入判断
 
