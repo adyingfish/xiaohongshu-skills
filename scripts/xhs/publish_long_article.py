@@ -9,7 +9,13 @@ from pathlib import Path
 
 from .cdp import Page
 from .errors import PublishError
-from .publish import _click_publish_tab, _find_content_element, _navigate_to_publish_page
+from .publish import (
+    _click_publish_tab,
+    _extract_hashtags_from_content,
+    _find_content_element,
+    _input_tags,
+    _navigate_to_publish_page,
+)
 from .selectors import (
     AUTO_FORMAT_BUTTON_TEXT,
     CONTENT_EDITOR,
@@ -140,7 +146,9 @@ def select_template(page: Page, template_name: str) -> bool:
     return bool(clicked)
 
 
-def click_next_and_fill_description(page: Page, description: str) -> None:
+def click_next_and_fill_description(
+    page: Page, description: str, tags: list[str] | None = None,
+) -> None:
     """点击下一步，进入发布页并填写正文描述。
 
     注意：发布页有独立的正文编辑器，需单独填入。
@@ -153,12 +161,14 @@ def click_next_and_fill_description(page: Page, description: str) -> None:
     Raises:
         PublishError: 操作失败。
     """
+    description, tags = _extract_hashtags_from_content(description, tags or [])
+
     # 点击"下一步"
     _click_button_by_text(page, NEXT_STEP_BUTTON_TEXT)
     time.sleep(_PAGE_LOAD_WAIT)
 
     # 填写发布页描述
-    if description:
+    if description or tags:
         # 截断描述到 1000 字以内
         if len(description) > 1000:
             description = description[:800]
@@ -166,6 +176,8 @@ def click_next_and_fill_description(page: Page, description: str) -> None:
 
         content_selector = _find_content_element(page)
         page.input_content_editable(content_selector, description)
+        if tags:
+            _input_tags(page, content_selector, tags)
         logger.info("已填写发布页描述")
 
 
