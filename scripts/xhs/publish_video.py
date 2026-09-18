@@ -12,6 +12,7 @@ from .errors import PublishError, UploadTimeoutError
 from .publish import (
     PublishUnconfirmedError,
     _click_publish_tab,
+    _extract_hashtags_from_content,
     _find_content_element,
     _input_tags,
     _install_publish_result_capture,
@@ -153,6 +154,7 @@ def _fill_publish_video_form(
     visibility: str,
 ) -> None:
     """填写视频表单（不点击发布）。"""
+    content, tags = _extract_hashtags_from_content(content, tags)
     # 标题
     page.input_text(TITLE_INPUT, title)
     time.sleep(1)

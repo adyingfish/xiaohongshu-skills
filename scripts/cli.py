@@ -683,7 +683,7 @@ def cmd_next_step(args: argparse.Namespace) -> None:
 
     browser, page = _connect_existing(args)
     try:
-        click_next_and_fill_description(page, description)
+        click_next_and_fill_description(page, description, tags=args.tags or [])
         _output({"success": True, "status": "已进入发布页，等待确认发布"})
     finally:
         browser.close()
@@ -1072,6 +1072,7 @@ def build_parser() -> argparse.ArgumentParser:
     # next-step
     sub = subparsers.add_parser("next-step", help="点击下一步 + 填写描述")
     sub.add_argument("--content-file", required=True)
+    sub.add_argument("--tags", nargs="*", help="话题名称列表，不带 #")
     sub.set_defaults(func=cmd_next_step)
 
     # diagnose-404

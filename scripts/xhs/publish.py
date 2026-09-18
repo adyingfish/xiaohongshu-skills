@@ -103,10 +103,7 @@ def fill_publish_form(page: Page, content: PublishImageContent) -> None:
     # 上传图片
     _upload_images(page, content.image_paths)
 
-    # 标签截取
-    tags = content.tags[:10] if len(content.tags) > 10 else content.tags
-    if len(content.tags) > 10:
-        logger.warning("标签数量超过10，截取前10个")
+    tags = content.tags
 
     logger.info(
         "发布内容: title=%s, images=%d, tags=%d, schedule=%s, original=%s, visibility=%s",
@@ -581,25 +578,27 @@ def _extract_hashtags_from_content(content: str, tags: list[str]) -> tuple[str, 
         (cleaned_content, merged_tags)
     """
     lines = content.rstrip().split("\n")
-    # 检查最后一行是否全是 #tag 格式
-    if lines:
-        last_line = lines[-1].strip()
-        hashtag_pattern = re.compile(r"^(#\S+\s*)+$")
-        if hashtag_pattern.match(last_line):
-            # 提取 hashtag
-            extracted = re.findall(r"#(\S+)", last_line)
-            # 合并到 tags（去重）
-            existing = {t.lstrip("#") for t in tags}
-            merged = list(tags)
-            for t in extracted:
-                if t not in existing:
-                    merged.append(t)
-                    existing.add(t)
-            # 去掉最后一行
-            cleaned = "\n".join(lines[:-1]).rstrip()
-            logger.info("从正文末尾提取 %d 个标签，合并后共 %d 个", len(extracted), len(merged))
-            return cleaned, merged
-    return content, list(tags)
+    extracted_lines = []
+    # 只提取末尾独立的话题行，保留正文中的井号、Markdown 标题和行内引用。
+    pattern = re.compile(r"(?:#[^#\s]+\s*)+")
+    while lines:
+        line = lines[-1].strip()
+        if not line:
+            lines.pop()
+        elif pattern.fullmatch(line):
+            extracted_lines.append(re.findall(r"#([^#\s]+)", lines.pop()))
+        else:
+            break
+    extracted = [tag for line in reversed(extracted_lines) for tag in line]
+    merged = []
+    for tag in [*tags, *extracted]:
+        tag = tag.strip().lstrip("#").strip()
+        if tag and tag not in merged:
+            merged.append(tag)
+    if len(merged) > 10:
+        raise PublishError("话题数量超过10个，请精简后重试；未自动丢弃话题")
+    cleaned = "\n".join(lines).rstrip() if extracted else content
+    return cleaned, merged
 
 
 def _fill_publish_form(
@@ -803,9 +802,10 @@ def _input_single_tag(page: Page, content_selector: str, tag: str) -> None:
                 break
 
     if not clicked:
-        # 没有联想，直接空格
-        logger.warning("未找到标签联想，直接输入空格: %s", tag)
-        page.type_text(" ", delay_ms=0)
+        raise PublishError(
+            f"话题 #{tag} 未找到可选联想，已中止填写，不能把普通 #文字当作话题发布。"
+            "请检查页面中的未完成话题后重新选择。"
+        )
 
     time.sleep(0.8)
 
