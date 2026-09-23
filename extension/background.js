@@ -182,6 +182,14 @@ async function handleCommand(msg) {
     case "get_cookies":
       return await cmdGetCookies(params);
 
+    case "inspect_current_xhs_tab":
+      return await cmdInspectCurrentXhsTab();
+
+    case "get_bound_xhs_tab": {
+      const tab = await getOrOpenXhsTab();
+      return { tab_id: tab.id };
+    }
+
     // ── 在页面主 world 执行 JS（可访问 window.__INITIAL_STATE__ 等） ──
     case "evaluate":
     case "evaluate_existing_creator":
@@ -690,7 +698,7 @@ async function cmdGetCookies({ domain = "xiaohongshu.com" }) {
 
 async function cmdEvaluateInMainWorld(method, params) {
   const tab = method === "evaluate_existing_creator"
-    ? await getExistingCreatorTab()
+    ? await getExistingCreatorTab(params.tabId)
     : await getOrOpenXhsTab();
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
@@ -702,7 +710,9 @@ async function cmdEvaluateInMainWorld(method, params) {
   if (r && typeof r === "object" && "__xhs_error" in r) {
     throw new Error(r.__xhs_error);
   }
-  return r;
+  return method === "evaluate_existing_creator" && r && typeof r === "object"
+    ? { ...r, tab_id: tab.id }
+    : r;
 }
 
 /**
@@ -1656,16 +1666,62 @@ async function riskControlAnalyzer(extraProbeUrls) {
 
 // ───────────────────────── Tab 管理 ─────────────────────────
 
-async function getExistingCreatorTab() {
-  const tabs = await chrome.tabs.query({ url: "https://creator.xiaohongshu.com/publish/publish*" });
-  const drafts = tabs.filter(tab => {
-    try { return new URL(tab.url).pathname === "/publish/publish"; }
-    catch { return false; }
+async function getExistingCreatorTab(tabId) {
+  let tab;
+  if (tabId !== undefined && tabId !== null) {
+    if (!Number.isInteger(tabId) || tabId < 0) throw new Error("无效的创作页标签 ID");
+    tab = await chrome.tabs.get(tabId);
+  } else {
+    const active = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+    if (active.length !== 1) throw new Error("无法确定当前活动标签页");
+    tab = active[0];
+  }
+  let url;
+  try { url = new URL(tab.url); }
+  catch { throw new Error("目标标签页没有可检查的网址"); }
+  if (url.protocol !== "https:" || url.hostname !== "creator.xiaohongshu.com" ||
+      url.pathname !== "/publish/publish") {
+    throw new Error("目标标签页不是图文创作页；请激活目标页或传入 --tab-id");
+  }
+  return tab;
+}
+
+async function cmdInspectCurrentXhsTab() {
+  const active = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+  if (active.length !== 1) throw new Error("无法确定当前活动标签页");
+  const tab = active[0];
+  let url;
+  try { url = new URL(tab.url); }
+  catch { return { tab_id: tab.id, active: true, page_type: "other", url: null }; }
+  const hosts = new Set(["www.xiaohongshu.com", "xiaohongshu.com", "creator.xiaohongshu.com"]);
+  if (url.protocol !== "https:" || !hosts.has(url.hostname)) {
+    return { tab_id: tab.id, active: true, page_type: "other", url: null };
+  }
+  const results = await chrome.scripting.executeScript({
+    target: { tabId: tab.id },
+    world: "MAIN",
+    func: () => {
+      const visible = el => !!el.getClientRects().length &&
+        getComputedStyle(el).visibility !== "hidden";
+      const editors = [...new Set([
+        ...document.querySelectorAll(".ql-editor"),
+        ...document.querySelectorAll('[role="textbox"][contenteditable="true"]')
+      ])].filter(visible);
+      const titles = [...document.querySelectorAll("div.d-input input")].filter(visible);
+      const imagePage = location.hostname === "creator.xiaohongshu.com" &&
+        location.pathname === "/publish/publish";
+      return {
+        url: location.origin + location.pathname,
+        page_type: imagePage ? "creator_image" :
+          location.hostname === "creator.xiaohongshu.com" ? "creator_other" :
+          location.pathname === "/" || location.pathname === "/explore" ? "home" : "xhs_other",
+        visible_editor_count: editors.length,
+        title: imagePage && titles.length === 1 ? titles[0].value : null,
+        images: imagePage ? document.querySelectorAll(".img-preview-area .pr").length : null
+      };
+    }
   });
-  if (drafts.length === 1) return drafts[0];
-  const active = drafts.filter(tab => tab.active);
-  if (active.length === 1) return active[0];
-  throw new Error(drafts.length ? "存在多个图文创作页，请仅保留一个或激活目标页" : "未找到已打开的图文创作页");
+  return { tab_id: tab.id, active: true, ...results[0].result };
 }
 
 async function getOrOpenXhsTab() {

@@ -31,12 +31,10 @@ def browser_upload_path(path: str, style: str | None = None) -> str:
     if not path or not isinstance(path, str):
         raise ValueError("上传文件路径不能为空")
     if os.name == "nt":
-        if not ntpath.isabs(path) or not ntpath.splitdrive(path)[0]:
-            raise ValueError("上传文件必须使用 Windows 绝对路径")
-        source = path
+        source = ntpath.abspath(path)
+        if not ntpath.isabs(source) or not ntpath.splitdrive(source)[0]:
+            raise ValueError("上传文件必须解析到 Windows 绝对路径")
     else:
-        if not os.path.isabs(path):
-            raise ValueError("上传文件必须使用执行端绝对路径")
         source = os.path.abspath(path)
     if not os.path.isfile(source) or not os.access(source, os.R_OK):
         raise ValueError(f"上传文件不存在或不可读: {path}")
@@ -101,9 +99,20 @@ class BridgePage:
     def evaluate(self, expression: str, timeout: float = 30.0) -> Any:
         return self._call("evaluate", {"expression": expression})
 
-    def evaluate_existing_creator(self, expression: str) -> Any:
-        """只在已打开的图文创作页执行表达式，不新建或导航标签页。"""
-        return self._call("evaluate_existing_creator", {"expression": expression})
+    def evaluate_existing_creator(self, expression: str, tab_id: int | None = None) -> Any:
+        """只在活动或显式指定的图文创作页执行，不新建标签页。"""
+        params = {"expression": expression}
+        if tab_id is not None:
+            params["tabId"] = tab_id
+        return self._call("evaluate_existing_creator", params)
+
+    def inspect_current_xhs_tab(self) -> dict:
+        """只读当前活动标签页的小红书状态。"""
+        return self._call("inspect_current_xhs_tab")
+
+    def get_bound_xhs_tab_id(self) -> int:
+        """返回既有 Bridge 命令正在使用的标签页 ID。"""
+        return int(self._call("get_bound_xhs_tab")["tab_id"])
 
     def evaluate_function(self, function_body: str, *args: Any) -> Any:
         return self._call("evaluate", {"expression": f"({function_body})()"})

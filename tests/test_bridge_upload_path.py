@@ -73,3 +73,50 @@ def test_native_windows_absolute_path_is_preserved(monkeypatch):
     )
     monkeypatch.setattr(bridge, "os", fake_os)
     assert bridge.browser_upload_path(r"C:\图片\示例.png", "windows") == r"C:\图片\示例.png"
+
+
+def test_existing_relative_video_path_is_resolved_in_local_mode(tmp_path, monkeypatch):
+    video = tmp_path / "视频.mp4"
+    video.touch()
+    monkeypatch.chdir(tmp_path)
+    assert browser_upload_path("视频.mp4", "local") == str(video)
+    page = BridgePage()
+    page._call = Mock()
+    page.set_file_input("video-input", ["视频.mp4"])
+    page._call.assert_called_once_with(
+        "set_file_input", {"selector": "video-input", "files": [str(video)]}
+    )
+
+
+def test_relative_path_must_resolve_to_wsl_mount_for_windows_mode(monkeypatch):
+    import xhs.bridge as bridge
+
+    monkeypatch.setattr(bridge.os.path, "abspath", lambda _: "/mnt/c/素材/视频.mp4")
+    monkeypatch.setattr(bridge.os.path, "isfile", lambda _: True)
+    monkeypatch.setattr(bridge.os.path, "realpath", lambda path: path)
+    monkeypatch.setattr(bridge.os, "access", lambda *_: True)
+    assert bridge.browser_upload_path("视频.mp4", "windows") == r"C:\素材\视频.mp4"
+
+
+def test_creator_evaluation_can_pin_tab_and_current_tab_is_separate():
+    page = BridgePage()
+    page._call = Mock(side_effect=[{"tab_id": 11}, {"page_type": "home"}])
+    assert page.evaluate_existing_creator("1 + 1", tab_id=11) == {"tab_id": 11}
+    assert page.inspect_current_xhs_tab() == {"page_type": "home"}
+    assert page._call.call_args_list[0].args == (
+        "evaluate_existing_creator",
+        {"expression": "1 + 1", "tabId": 11},
+    )
+    assert page._call.call_args_list[1].args == ("inspect_current_xhs_tab",)
+
+
+def test_existing_relative_linux_file_is_rejected_for_windows_browser(tmp_path, monkeypatch):
+    file = tmp_path / "视频.mp4"
+    file.touch()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XHS_BROWSER_PATH_STYLE", "windows")
+    page = BridgePage()
+    page._call = Mock()
+    with pytest.raises(ValueError, match="Windows 浏览器无法访问"):
+        page.set_file_input("video-input", ["视频.mp4"])
+    page._call.assert_not_called()

@@ -148,6 +148,14 @@ _connect_saved_tab = _connect
 _connect_existing = _connect
 
 
+def _connect_readonly(args: argparse.Namespace):
+    """连接已运行的 Bridge；不启动 Chrome 或导航标签页。"""
+    from xhs.bridge import BridgePage
+
+    bridge_url = getattr(args, "bridge_url", "ws://localhost:9333")
+    return _DummyBrowser(), BridgePage(bridge_url)
+
+
 # ─── 子命令实现 ───────────────────────────────────────────────────────────────
 
 
@@ -561,7 +569,7 @@ def cmd_fill_publish(args: argparse.Namespace) -> None:
     with open(args.title_file, encoding="utf-8") as f:
         title = f.read().strip()
     with open(args.content_file, encoding="utf-8") as f:
-        content = f.read().strip()
+        content = f.read().rstrip("\r\n")
 
     image_paths = process_images(args.images) if args.images else []
     if not image_paths:
@@ -569,24 +577,46 @@ def cmd_fill_publish(args: argparse.Namespace) -> None:
 
     browser, page = _connect(args)
     try:
-        fill_publish_form(
-            page,
-            PublishImageContent(
-                title=title,
-                content=content,
-                tags=args.tags or [],
-                image_paths=image_paths,
-                schedule_time=args.schedule_at,
-                is_original=args.original,
-                visibility=args.visibility or "",
-            ),
-        )
-        snapshot = inspect_publish_form(page)
-        verification = verify_publish_form(
-            snapshot, title, content, len(image_paths), args.tags or []
-        )
-        _output({"success": True, "title": title, "images": len(image_paths),
-                 "verification": verification, "status": "表单已填写且回读通过，等待确认发布"})
+        try:
+            fill_publish_form(
+                page,
+                PublishImageContent(
+                    title=title,
+                    content=content,
+                    tags=args.tags or [],
+                    image_paths=image_paths,
+                    schedule_time=args.schedule_at,
+                    is_original=args.original,
+                    visibility=args.visibility or "",
+                ),
+            )
+            tab_id = page.get_bound_xhs_tab_id() if hasattr(page, "get_bound_xhs_tab_id") else None
+            snapshot = inspect_publish_form(page, tab_id)
+            verification = verify_publish_form(
+                snapshot, title, content, len(image_paths), args.tags or []
+            )
+        except Exception as error:
+            _output({
+                "success": False, "form_state": "possibly_filled", "published": False,
+                "error": str(error),
+                "next_step": (
+                    "页面可能已有稿件；先运行 inspect-current-xhs-tab 和 "
+                    "inspect-publish-form，勿自动重填或重传"
+                ),
+            }, exit_code=2)
+            return
+        if not verification["verified"]:
+            _output({
+                "success": False, "form_state": "filled", "published": False,
+                "verification": verification,
+                "next_step": "先只读检查当前稿件，勿自动重填或重传",
+            }, exit_code=2)
+            return
+        _output({
+            "success": True, "form_state": "filled", "published": False,
+            "title": title, "images": len(image_paths), "verification": verification,
+            "status": "表单已填写且回读通过，等待人工确认发布",
+        })
     finally:
         browser.close()
 
@@ -595,9 +625,18 @@ def cmd_inspect_publish_form(args: argparse.Namespace) -> None:
     """只读当前图文草稿，不导航、上传或发布。"""
     from xhs.publish_form import inspect_publish_form
 
-    browser, page = _connect_existing(args)
+    browser, page = _connect_readonly(args)
     try:
-        _output({"success": True, "preview": inspect_publish_form(page)})
+        _output({"success": True, "preview": inspect_publish_form(page, args.tab_id)})
+    finally:
+        browser.close()
+
+
+def cmd_inspect_current_xhs_tab(args: argparse.Namespace) -> None:
+    """只读活动标签页的最小状态，不打开或导航页面。"""
+    browser, page = _connect_readonly(args)
+    try:
+        _output({"success": True, "tab": page.inspect_current_xhs_tab()})
     finally:
         browser.close()
 
@@ -609,10 +648,14 @@ def cmd_restore_publish_body(args: argparse.Namespace) -> None:
     from xhs.publish_form import restore_publish_body
 
     title = Path(args.title_file).read_text(encoding="utf-8").strip()
-    content = Path(args.content_file).read_text(encoding="utf-8").strip()
-    browser, page = _connect_existing(args)
+    content = Path(args.content_file).read_text(encoding="utf-8").rstrip("\r\n")
+    tags = list(args.tags or [])
+    if args.tags_file:
+        lines = Path(args.tags_file).read_text(encoding="utf-8").splitlines()
+        tags.extend(line.strip() for line in lines if line.strip())
+    browser, page = _connect_readonly(args)
     try:
-        result = restore_publish_body(page, title, content, args.image_count)
+        result = restore_publish_body(page, title, content, args.image_count, tags, args.tab_id)
         _output({"success": True, **result, "status": "正文已核对，未发布"})
     finally:
         browser.close()
@@ -1073,13 +1116,20 @@ def build_parser() -> argparse.ArgumentParser:
     sub.set_defaults(func=cmd_fill_publish)
 
     # 当前图文草稿检查与显式末尾恢复
-    sub = subparsers.add_parser("inspect-publish-form", help="只读当前图文草稿")
+    sub = subparsers.add_parser("inspect-current-xhs-tab", help="只读活动标签页的最小状态")
+    sub.set_defaults(func=cmd_inspect_current_xhs_tab)
+
+    sub = subparsers.add_parser("inspect-publish-form", help="只读活动或指定的图文草稿")
+    sub.add_argument("--tab-id", type=int, help="显式指定已打开的图文创作页标签 ID")
     sub.set_defaults(func=cmd_inspect_publish_form)
 
-    sub = subparsers.add_parser("restore-publish-body", help="核对后补齐正文末尾（不发布）")
+    sub = subparsers.add_parser("restore-publish-body", help="核对后补齐普通正文末尾（不发布）")
     sub.add_argument("--title-file", required=True)
     sub.add_argument("--content-file", required=True)
     sub.add_argument("--image-count", type=int, required=True)
+    sub.add_argument("--tags", nargs="*", help="预期已绑定的话题名称")
+    sub.add_argument("--tags-file", help="每行一个预期已绑定话题")
+    sub.add_argument("--tab-id", type=int, help="显式指定已打开的图文创作页标签 ID")
     sub.set_defaults(func=cmd_restore_publish_body)
 
     # fill-publish-video

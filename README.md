@@ -122,10 +122,14 @@ python scripts/cli.py fill-publish \
   --title-file title.txt \
   --content-file content.txt \
   --images "/abs/path/pic1.jpg" "/abs/path/pic2.jpg"
+# 先确认活动标签页；首页也会返回最小状态，不切换到后台草稿
+python scripts/cli.py inspect-current-xhs-tab
 python scripts/cli.py inspect-publish-form
-# 如正文仅连续缺失末尾，且正文没有交由话题选择器处理的话题，可显式恢复：
+# 如只缺普通正文末尾，且话题节点已被识别为绑定状态，可显式恢复：
 python scripts/cli.py restore-publish-body \
-  --title-file title.txt --content-file content.txt --image-count 2
+  --title-file title.txt --content-file content.txt --image-count 2 \
+  --tags "旅行" "摄影"
+# 话题另存文件时，也可用 --tags-file tags.txt（每行一个）
 python scripts/cli.py inspect-publish-form
 # 人工确认预览后，另行执行：
 python scripts/cli.py click-publish
@@ -198,8 +202,9 @@ python scripts/cli.py send-direct-message \
 | `publish` | 一步发布图文 |
 | `publish-video` | 一步发布视频 |
 | `fill-publish` | 填写图文表单并回读核对（不发布） |
-| `inspect-publish-form` | 只读当前图文稿件的标题、正文和图片预览数 |
-| `restore-publish-body` | 核对后仅补齐连续缺失的正文末尾（不发布） |
+| `inspect-current-xhs-tab` | 只读活动标签页的最小状态，首页或非创作页也能诊断 |
+| `inspect-publish-form` | 只读活动或 `--tab-id` 指定的图文稿件 |
+| `restore-publish-body` | 核对标题、图片、绑定话题后仅补齐普通正文末尾（不发布） |
 | `fill-publish-video` | 填写视频表单（不发布，供预览） |
 | `click-publish` | 确认发布（点击发布按钮） |
 | `save-draft` | 保存为草稿 |
@@ -207,7 +212,9 @@ python scripts/cli.py send-direct-message \
 | `select-template` | 选择长文排版模板 |
 | `next-step` | 长文下一步 + 填写描述 |
 
-Bridge 上传文件时默认使用执行端的绝对路径。若 Python 在 WSL、Chrome 在 Windows，先将图片或视频放到 `/mnt/<盘符>/`，运行前设置 `XHS_BROWSER_PATH_STYLE=windows`；Bridge 会在传给扩展时转换成 `C:\\...` 一类的 Windows 路径。原生 Windows Python 也可使用此模式；同系统运行保持默认 `local`。路径转换成功仍需检查浏览器中的实际上传预览。
+`fill-publish` 将填写状态、回读状态和发布状态分别输出。填写或回读失败时，页面可能已经有完整稿件；先执行只读检查，勿自动重填或重传。纯文本 `#话题` 不能证明话题已绑定；无法识别绑定节点时状态为 `unverified`，恢复命令不会写入。`inspect-publish-form` 默认只看活动创作页；如需检查指定后台草稿，先激活该页取得标签 ID，再显式传 `--tab-id`。只读检查和恢复只连接已运行的 Bridge，不自动启动浏览器。
+
+Bridge 上传文件时默认将执行端路径解析为绝对路径，既接受绝对路径，也接受现存的相对视频路径。若 Python 在 WSL、Chrome 在 Windows，先将图片或视频放到 `/mnt/<盘符>/`，运行前设置 `XHS_BROWSER_PATH_STYLE=windows`；Bridge 会在传给扩展时转换成 `C:\\...` 一类的 Windows 路径。原生 Windows Python 也可使用此模式；同系统运行保持默认 `local`。路径转换成功仍需检查浏览器中的实际上传预览。
 
 退出码：`0` 成功 · `1` 未登录 · `2` 错误
 
