@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import base64
 import json
+import ntpath
 import os
+import re
 from typing import Any
 
 import websockets.sync.client as ws_client
@@ -19,6 +21,37 @@ import websockets.sync.client as ws_client
 from .errors import CDPError, ElementNotFoundError
 
 BRIDGE_URL = "ws://localhost:9333"
+
+
+def browser_upload_path(path: str, style: str | None = None) -> str:
+    """校验执行端文件，并在明确指定 Windows 浏览器时转换路径。"""
+    style = os.environ.get("XHS_BROWSER_PATH_STYLE", "local") if style is None else style
+    if style not in {"local", "windows"}:
+        raise ValueError("XHS_BROWSER_PATH_STYLE 仅支持 local 或 windows")
+    if not path or not isinstance(path, str):
+        raise ValueError("上传文件路径不能为空")
+    if os.name == "nt":
+        if not ntpath.isabs(path) or not ntpath.splitdrive(path)[0]:
+            raise ValueError("上传文件必须使用 Windows 绝对路径")
+        source = path
+    else:
+        if not os.path.isabs(path):
+            raise ValueError("上传文件必须使用执行端绝对路径")
+        source = os.path.abspath(path)
+    if not os.path.isfile(source) or not os.access(source, os.R_OK):
+        raise ValueError(f"上传文件不存在或不可读: {path}")
+    if style == "local":
+        return source
+    if os.name == "nt":
+        return ntpath.normpath(source)
+    # 符号链接可能指向 Linux 私有目录；只转换真实落在挂载盘上的文件。
+    match = re.fullmatch(r"/mnt/([a-zA-Z])/(.+)", os.path.realpath(source))
+    if not match:
+        raise ValueError(
+            "Windows 浏览器无法访问此执行端路径；"
+            "请把文件放到 /mnt/<盘符>/ 下，或调整 XHS_BROWSER_PATH_STYLE"
+        )
+    return match[1].upper() + ":\\" + match[2].replace("/", "\\")
 
 
 class BridgePage:
@@ -67,6 +100,10 @@ class BridgePage:
 
     def evaluate(self, expression: str, timeout: float = 30.0) -> Any:
         return self._call("evaluate", {"expression": expression})
+
+    def evaluate_existing_creator(self, expression: str) -> Any:
+        """只在已打开的图文创作页执行表达式，不新建或导航标签页。"""
+        return self._call("evaluate_existing_creator", {"expression": expression})
 
     def evaluate_function(self, function_body: str, *args: Any) -> Any:
         return self._call("evaluate", {"expression": f"({function_body})()"})
@@ -217,9 +254,10 @@ class BridgePage:
         """通过 chrome.debugger + DOM.setFileInputFiles 上传本地文件。
         传递绝对路径给扩展，由扩展调用 CDP 完成上传（与原 CDP 方式等价）。
         """
-        # 统一转换为绝对路径（兼容 Windows 反斜杠）
-        abs_paths = [os.path.abspath(path) for path in files]
-        self._call("set_file_input", {"selector": selector, "files": abs_paths})
+        if not files:
+            raise ValueError("上传文件列表不能为空")
+        browser_paths = [browser_upload_path(path) for path in files]
+        self._call("set_file_input", {"selector": selector, "files": browser_paths})
 
     # ─── 截图 ────────────────────────────────────────────────────
 
