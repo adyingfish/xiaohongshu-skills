@@ -184,6 +184,7 @@ async function handleCommand(msg) {
 
     // ── 在页面主 world 执行 JS（可访问 window.__INITIAL_STATE__ 等） ──
     case "evaluate":
+    case "evaluate_existing_creator":
     case "wait_dom_stable":
     case "wait_for_selector":
     case "has_element":
@@ -688,12 +689,14 @@ async function cmdGetCookies({ domain = "xiaohongshu.com" }) {
 // ───────────────────────── MAIN world JS 执行 ─────────────────────────
 
 async function cmdEvaluateInMainWorld(method, params) {
-  const tab = await getOrOpenXhsTab();
+  const tab = method === "evaluate_existing_creator"
+    ? await getExistingCreatorTab()
+    : await getOrOpenXhsTab();
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     world: "MAIN",
     func: mainWorldExecutor,
-    args: [method, params],
+    args: [method === "evaluate_existing_creator" ? "evaluate" : method, params],
   });
   const r = results?.[0]?.result;
   if (r && typeof r === "object" && "__xhs_error" in r) {
@@ -1652,6 +1655,18 @@ async function riskControlAnalyzer(extraProbeUrls) {
 }
 
 // ───────────────────────── Tab 管理 ─────────────────────────
+
+async function getExistingCreatorTab() {
+  const tabs = await chrome.tabs.query({ url: "https://creator.xiaohongshu.com/publish/publish*" });
+  const drafts = tabs.filter(tab => {
+    try { return new URL(tab.url).pathname === "/publish/publish"; }
+    catch { return false; }
+  });
+  if (drafts.length === 1) return drafts[0];
+  const active = drafts.filter(tab => tab.active);
+  if (active.length === 1) return active[0];
+  throw new Error(drafts.length ? "存在多个图文创作页，请仅保留一个或激活目标页" : "未找到已打开的图文创作页");
+}
 
 async function getOrOpenXhsTab() {
   const tabs = await chrome.tabs.query({

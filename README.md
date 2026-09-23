@@ -117,11 +117,17 @@ python scripts/cli.py search-feeds \
 python scripts/cli.py get-feed-detail \
   --feed-id FEED_ID --xsec-token XSEC_TOKEN
 
-# 图文发布（分步：填写 → 预览 → 确认）
+# 图文发布（分步：填写 → 回读检查 → 人工预览 → 确认）
 python scripts/cli.py fill-publish \
   --title-file title.txt \
   --content-file content.txt \
   --images "/abs/path/pic1.jpg" "/abs/path/pic2.jpg"
+python scripts/cli.py inspect-publish-form
+# 如正文仅连续缺失末尾，且正文没有交由话题选择器处理的话题，可显式恢复：
+python scripts/cli.py restore-publish-body \
+  --title-file title.txt --content-file content.txt --image-count 2
+python scripts/cli.py inspect-publish-form
+# 人工确认预览后，另行执行：
 python scripts/cli.py click-publish
 
 # 一步发布图文
@@ -191,13 +197,17 @@ python scripts/cli.py send-direct-message \
 | `send-direct-message` | 授权后发送文字私信并核对结果 |
 | `publish` | 一步发布图文 |
 | `publish-video` | 一步发布视频 |
-| `fill-publish` | 填写图文表单（不发布，供预览） |
+| `fill-publish` | 填写图文表单并回读核对（不发布） |
+| `inspect-publish-form` | 只读当前图文稿件的标题、正文和图片预览数 |
+| `restore-publish-body` | 核对后仅补齐连续缺失的正文末尾（不发布） |
 | `fill-publish-video` | 填写视频表单（不发布，供预览） |
 | `click-publish` | 确认发布（点击发布按钮） |
 | `save-draft` | 保存为草稿 |
 | `long-article` | 长文模式：填写 + 一键排版 |
 | `select-template` | 选择长文排版模板 |
 | `next-step` | 长文下一步 + 填写描述 |
+
+Bridge 上传文件时默认使用执行端的绝对路径。若 Python 在 WSL、Chrome 在 Windows，先将图片或视频放到 `/mnt/<盘符>/`，运行前设置 `XHS_BROWSER_PATH_STYLE=windows`；Bridge 会在传给扩展时转换成 `C:\\...` 一类的 Windows 路径。原生 Windows Python 也可使用此模式；同系统运行保持默认 `local`。路径转换成功仍需检查浏览器中的实际上传预览。
 
 退出码：`0` 成功 · `1` 未登录 · `2` 错误
 

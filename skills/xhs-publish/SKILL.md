@@ -35,7 +35,9 @@ metadata:
 
 | 子命令 | 用途 |
 |--------|------|
-| `fill-publish` | 填写图文表单（不发布） |
+| `fill-publish` | 填写图文表单并回读核对（不发布） |
+| `inspect-publish-form` | 只读当前图文稿件 |
+| `restore-publish-body` | 核对后补齐正文末尾（不发布） |
 | `fill-publish-video` | 填写视频表单（不发布） |
 | `publish` | 图文一步发布 |
 | `publish-video` | 视频一步发布 |
@@ -171,7 +173,13 @@ python scripts/cli.py fill-publish \
   [--schedule-at "2026-03-10T12:00:00"] \
   [--original] [--visibility "公开可见"]
 
-# 步骤 2: 通过 AskUserQuestion 让用户确认浏览器中的预览
+# 步骤 2: 只读回看当前图文稿件，并让用户确认浏览器中的预览
+python scripts/cli.py inspect-publish-form
+
+# 仅当正文连续缺失末尾、无话题选择器处理的话题时，可显式补齐并再次检查
+python scripts/cli.py restore-publish-body \
+  --title-file /tmp/xhs_title.txt --content-file /tmp/xhs_content.txt --image-count 2
+python scripts/cli.py inspect-publish-form
 
 # 步骤 3a: 用户确认发布
 python scripts/cli.py click-publish

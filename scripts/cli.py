@@ -555,6 +555,7 @@ def cmd_fill_publish(args: argparse.Namespace) -> None:
     """只填写图文表单，不发布。"""
     from image_downloader import process_images
     from xhs.publish import fill_publish_form
+    from xhs.publish_form import inspect_publish_form, verify_publish_form
     from xhs.types import PublishImageContent
 
     with open(args.title_file, encoding="utf-8") as f:
@@ -580,7 +581,39 @@ def cmd_fill_publish(args: argparse.Namespace) -> None:
                 visibility=args.visibility or "",
             ),
         )
-        _output({"success": True, "title": title, "images": len(image_paths), "status": "表单已填写，等待确认发布"})
+        snapshot = inspect_publish_form(page)
+        verification = verify_publish_form(
+            snapshot, title, content, len(image_paths), args.tags or []
+        )
+        _output({"success": True, "title": title, "images": len(image_paths),
+                 "verification": verification, "status": "表单已填写且回读通过，等待确认发布"})
+    finally:
+        browser.close()
+
+
+def cmd_inspect_publish_form(args: argparse.Namespace) -> None:
+    """只读当前图文草稿，不导航、上传或发布。"""
+    from xhs.publish_form import inspect_publish_form
+
+    browser, page = _connect_existing(args)
+    try:
+        _output({"success": True, "preview": inspect_publish_form(page)})
+    finally:
+        browser.close()
+
+
+def cmd_restore_publish_body(args: argparse.Namespace) -> None:
+    """只补齐经核对后确认缺失的正文末尾。"""
+    from pathlib import Path
+
+    from xhs.publish_form import restore_publish_body
+
+    title = Path(args.title_file).read_text(encoding="utf-8").strip()
+    content = Path(args.content_file).read_text(encoding="utf-8").strip()
+    browser, page = _connect_existing(args)
+    try:
+        result = restore_publish_body(page, title, content, args.image_count)
+        _output({"success": True, **result, "status": "正文已核对，未发布"})
     finally:
         browser.close()
 
@@ -1038,6 +1071,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_argument("--original", action="store_true")
     sub.add_argument("--visibility")
     sub.set_defaults(func=cmd_fill_publish)
+
+    # 当前图文草稿检查与显式末尾恢复
+    sub = subparsers.add_parser("inspect-publish-form", help="只读当前图文草稿")
+    sub.set_defaults(func=cmd_inspect_publish_form)
+
+    sub = subparsers.add_parser("restore-publish-body", help="核对后补齐正文末尾（不发布）")
+    sub.add_argument("--title-file", required=True)
+    sub.add_argument("--content-file", required=True)
+    sub.add_argument("--image-count", type=int, required=True)
+    sub.set_defaults(func=cmd_restore_publish_body)
 
     # fill-publish-video
     sub = subparsers.add_parser("fill-publish-video", help="填写视频表单（不发布）")
