@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from string import Template
 from urllib.parse import urlparse
 
 from .errors import PublishError
@@ -265,10 +266,10 @@ def restore_publish_body(
         },
         ensure_ascii=False,
     )
-    expression = (
+    expression = Template(
         """(() => {
-        const wanted = PAYLOAD;
-        const current = SNAPSHOT;
+        const wanted = $PAYLOAD;
+        const current = $SNAPSHOT;
         if (current.url !== wanted.url || current.title !== wanted.title ||
             current.body !== wanted.body || current.body_plain !== wanted.body_plain ||
             current.images !== wanted.images ||
@@ -276,7 +277,7 @@ def restore_publish_body(
             current.topic_block_index !== wanted.topic_block_index ||
             JSON.stringify(current.topics) !== JSON.stringify(wanted.topics)) return false;
         const el = [...new Set([
-            ...document.querySelectorAll(EDITOR),
+            ...document.querySelectorAll($EDITOR),
             ...document.querySelectorAll('[role="textbox"][contenteditable="true"]')
         ])].filter(node => !!node.getClientRects().length &&
             getComputedStyle(node).visibility !== 'hidden')[0];
@@ -301,9 +302,11 @@ def restore_publish_body(
             if (!document.execCommand('insertText', false, line)) return false;
         }
         return true;
-    })()""".replace("PAYLOAD", payload)
-        .replace("SNAPSHOT", _SNAPSHOT_JS)
-        .replace("EDITOR", json.dumps(CONTENT_EDITOR))
+    })()"""
+    ).substitute(
+        PAYLOAD=payload,
+        SNAPSHOT=_SNAPSHOT_JS,
+        EDITOR=json.dumps(CONTENT_EDITOR),
     )
     try:
         write_result = _evaluate_creator(page, expression, before["tab_id"])
